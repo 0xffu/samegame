@@ -1,0 +1,288 @@
+<canvas id="game" style="display: block;margin-bottom: 5"
+  width="500" height="500"></canvas>
+<canvas id="time" style="display: block" width="500" height="20"></canvas>
+<p>Press 'r' to restart</p>
+<p id="msg"></p>
+
+<script>
+
+let time_max = 10000;
+let names = ["red", "green", "blue"];
+let colors = ["#ff0000", "#00ff00", "#0000ff"];
+let block_count = 5;
+let gc = document.getElementById("game");
+let tc = document.getElementById("time");
+let msge = document.getElementById("msg");
+let bh = gc.height/block_count;
+let bw = gc.width/block_count;
+var gctx = gc.getContext("2d");
+var tctx = tc.getContext("2d");
+var board;
+var color_count = [0, 0, 0];
+var allow_input = true;
+var time_interval;
+var start_time;
+
+function rand_int(max)
+{
+  return Math.floor(Math.random() * max);
+}
+
+function set_msg(msg)
+{
+  msge.innerText = msg;
+}
+
+function board_init()
+{
+  var board = new Array(block_count);
+  for (var i = 0; i < block_count; i++)
+    board[i] = new Array(block_count);
+
+  return board;
+}
+
+function board_randomize()
+{
+  for (var x = 0; x < block_count; x++) {
+    for (var y = 0; y < block_count; y++) {
+      board[x][y] = rand_int(colors.length);
+    }
+  }
+}
+
+function move_down()
+{
+  for (var x = 0; x < block_count; x++) {
+    var c = 0;
+    for (var y = block_count-1; y >= 0; y--) {
+      if (board[x][y] == -1) {
+        c++;
+      } else if (c) {
+        board[x][y+c] = board[x][y];
+        board[x][y] = -1;
+      }
+    }
+  }
+}
+
+function move_left()
+{
+  var c = 0;
+  for (var x = 0; x < block_count; x++) {
+    var empty = true;
+    for (var y = 0; y < block_count; y++) {
+      if (board[x][y] != -1) {
+        empty = false;
+        break;
+      }
+    }
+
+    if (c) {
+      for (var y = 0; y < block_count; y++) {
+        board[x-c][y] = board[x][y];
+        board[x][y] = -1;
+      }
+    }
+
+    if (empty)
+      c++;
+  }
+}
+
+function end_game(result)
+{
+  allow_input = false;
+  clearInterval(time_interval);
+
+  if (result) {
+    set_msg("");
+  } else {
+    msg = "";
+    var fc = 0;
+    for (var i = 0; i < colors.length; i++) {
+      if (color_count[i] == 1) {
+        if (fc) {
+          msg += " and " + names[i];
+        } else {
+          msg += names[i];
+        }
+        fc++;
+      }
+    }
+
+    console.log(fc, color_count);
+    if (fc) {
+      set_msg("failed " + msg);
+    } else {
+      set_msg("out of time");
+    }
+  }
+
+  tctx.fillStyle = result ? "#00ff00" : "#ff0000";
+  tctx.fillRect(0, 0, tc.width, tc.height);
+}
+
+function check_moves()
+{
+  for (var i = 0; i < colors.length; i++)
+    color_count[i] = 0;
+
+  for (var x = 0; x < block_count; x++) {
+    for (var y = 0; y < block_count; y++) {
+      let v = board[x][y];
+      if (v != -1)
+        color_count[v]++;
+    }
+  }
+
+  var zero_count = 0;
+  for (var i = 0; i < colors.length; i++) {
+    if (color_count[i] == 1) {
+      end_game(false);
+      break;
+    } else if (!color_count[i]) {
+      zero_count++;
+    }
+  }
+
+  if (zero_count == colors.length) {
+    end_game(true);
+  }
+}
+
+function has_moves(x, y)
+{
+  let v = board[x][y];
+  if (v == -1)
+    return false;
+
+  if (x > 0)
+    if (board[x-1][y] == v)
+      return true;
+  if (x < block_count-1)
+    if (board[x+1][y] == v)
+      return true;
+  if (y > 0)
+    if (board[x][y-1] == v)
+      return true;
+  if (y < block_count-1)
+    if (board[x][y+1] == v)
+      return true;
+
+  return false;
+}
+
+function walk_tile(x, y)
+{
+  let v = board[x][y];
+  if (v == -1)
+    return;
+
+  board[x][y] = -1;
+
+  if (x > 0)
+    if (board[x-1][y] == v)
+      walk_tile(x-1, y);
+  if (x < block_count-1)
+    if (board[x+1][y] == v)
+      walk_tile(x+1, y);
+  if (y > 0)
+    if (board[x][y-1] == v)
+      walk_tile(x, y-1);
+  if (y < block_count-1)
+    if (board[x][y+1] == v)
+      walk_tile(x, y+1);
+}
+
+function draw_tile(x, y)
+{
+  let v = board[x][y];
+  gctx.fillStyle = (0 > v) ? "#000000" : colors[board[x][y]];
+  gctx.fillRect(x*bw, y*bh, bw, bh);
+}
+
+function board_draw()
+{
+  for (var i = 0; i < block_count; i++) {
+    for (var j = 0; j < block_count; j++) {
+      draw_tile(i, j);
+    }
+  }
+}
+
+function on_click(e)
+{
+  if (!allow_input)
+    return;
+
+  let mx = e.offsetX;
+  let my = e.offsetY;
+
+  let x = Math.floor(mx / bw);
+  let y = Math.floor(my / bh);
+
+  if (!has_moves(x, y))
+    return;
+
+  walk_tile(x, y);
+  move_down();
+  move_left();
+  check_moves();
+  board_draw();
+}
+
+function time_draw(x)
+{
+  tctx.fillStyle = "#000000";
+  tctx.fillRect(0, 0, tc.width, tc.height);
+  tctx.fillStyle = "#ff00ff";
+  tctx.fillRect(0, 0, tc.width-(tc.width*x), tc.height);
+}
+
+function time_update()
+{
+  var tdiff = new Date() - start_time;
+
+  time_draw(tdiff/time_max);
+
+  if (tdiff > time_max) {
+    end_game(false);
+  }
+}
+
+function time_init()
+{
+  clearInterval(time_interval);
+  start_time = new Date();
+  time_update();
+  time_interval = setInterval(time_update, 10);
+}
+
+function start_game()
+{
+  board_randomize();
+  board_draw();
+  allow_input = true;
+  time_init();
+  set_msg("");
+}
+
+function on_key_press(e)
+{
+  if (e.code == "KeyR") {
+    start_game();
+  }
+}
+
+function main()
+{
+  board = board_init();
+  gc.onclick = on_click;
+  document.onkeypress = on_key_press;
+  start_game();
+}
+
+main();
+
+</script>
