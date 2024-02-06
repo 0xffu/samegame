@@ -3,6 +3,7 @@
 <canvas id="time" style="display: block" width="500" height="20"></canvas>
 <p>Press 'r' to restart</p>
 <p id="msg"></p>
+<div id="cont"></div>
 
 <script>
 
@@ -17,11 +18,83 @@ let bh = gc.height/block_count;
 let bw = gc.width/block_count;
 var gctx = gc.getContext("2d");
 var tctx = tc.getContext("2d");
+var board_history = [];
+var click_history = [];
 var board;
 var color_count = [0, 0, 0];
 var allow_input = true;
 var time_interval;
 var start_time;
+
+function add_board_history()
+{
+  var cb = board_init();
+
+  for (var x = 0; x < block_count; x++) {
+    for (var y = 0; y < block_count; y++) {
+      cb[x][y] = board[x][y];
+    }
+  }
+
+  board_history.push(cb);
+}
+
+function draw_history_walk_tile(ctx, board, x, y)
+{
+  let v = board[x][y];
+  if (v == -1)
+    return;
+
+  board[x][y] = -1;
+
+  ctx.fillStyle = "#ffffff";
+
+  ctx.fillRect(x*bw+(bw*0.5)-12.5, y*bh+(bw*0.5)-12.5, 25, 25);
+
+  if (x > 0)
+    if (board[x-1][y] == v)
+      draw_history_walk_tile(ctx, board, x-1, y);
+  if (x < block_count-1)
+    if (board[x+1][y] == v)
+      draw_history_walk_tile(ctx, board, x+1, y);
+  if (y > 0)
+    if (board[x][y-1] == v)
+      draw_history_walk_tile(ctx, board, x, y-1);
+  if (y < block_count-1)
+    if (board[x][y+1] == v)
+      draw_history_walk_tile(ctx, board, x, y+1);
+}
+
+function draw_history()
+{
+  var e = document.getElementById("cont");
+  if (!e)
+    return;
+
+  e.innerHTML = "";
+
+  var ht = document.createElement("p");
+  ht.innerText = "history:";
+  e.appendChild(ht);
+
+  for (var i = 0; i < board_history.length; i++) {
+    var cc = document.createElement("canvas");
+    cc.height = gc.height;
+    cc.width = gc.width;
+    cc.style = "margin: 5px";
+
+    var cctx = cc.getContext("2d");
+
+    board_draw(board_history[i], cctx);
+
+    if (i < click_history.length) {
+      var pos = click_history[i];
+      draw_history_walk_tile(cctx, board_history[i], pos[0], pos[1]);
+    }
+
+    e.appendChild(cc);
+  }
+}
 
 function rand_int(max)
 {
@@ -121,6 +194,10 @@ function end_game(result)
 
   tctx.fillStyle = result ? "#00ff00" : "#ff0000";
   tctx.fillRect(0, 0, tc.width, tc.height);
+
+  if (!result)
+    add_board_history();
+  draw_history();
 }
 
 function check_moves()
@@ -195,18 +272,13 @@ function walk_tile(x, y)
       walk_tile(x, y+1);
 }
 
-function draw_tile(x, y)
+function board_draw(board, ctx)
 {
-  let v = board[x][y];
-  gctx.fillStyle = (0 > v) ? "#000000" : colors[board[x][y]];
-  gctx.fillRect(x*bw, y*bh, bw, bh);
-}
-
-function board_draw()
-{
-  for (var i = 0; i < block_count; i++) {
-    for (var j = 0; j < block_count; j++) {
-      draw_tile(i, j);
+  for (var x = 0; x < block_count; x++) {
+    for (var y = 0; y < block_count; y++) {
+      let v = board[x][y];
+      ctx.fillStyle = (0 > v) ? "#000000" : colors[board[x][y]];
+      ctx.fillRect(x*bw, y*bh, bw, bh);
     }
   }
 }
@@ -225,11 +297,14 @@ function on_click(e)
   if (!has_moves(x, y))
     return;
 
+  click_history.push([x, y]);
+  add_board_history();
+
   walk_tile(x, y);
   move_down();
   move_left();
   check_moves();
-  board_draw();
+  board_draw(board, gctx);
 }
 
 function time_draw(x)
@@ -261,8 +336,18 @@ function time_init()
 
 function start_game()
 {
+  /* clear history */
+  board_history = [];
+  click_history = [];
+  var e = document.getElementById("cont");
+  if (!e)
+    return;
+
+  e.innerHTML = "";
+
+
   board_randomize();
-  board_draw();
+  board_draw(board, gctx);
   allow_input = true;
   time_init();
   set_msg("");
